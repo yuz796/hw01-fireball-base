@@ -112,26 +112,27 @@ float random (vec2 st) {
         43758.5453123);
 }
 
+float hashnew (vec2 n)
+{
+    return fract(sin(dot(n, vec2(123.456789, 987.654321))) * 54321.9876 );
+}
+
 // Based on Morgan McGuire @morgan3d
 // https://www.shadertoy.com/view/4dS3Wd
 float noise (vec2 st) {
     vec2 i = floor(st);
     vec2 f = fract(st);
 
-    // Four corners in 2D of a tile
-    float a = random(i);
-    float b = random(i + vec2(1.0, 0.0));
+    float a = hashnew(i);
+    float b = hashnew(i + vec2(1.0, 0.0));
     float c = random(i + vec2(0.0, 1.0));
     float d = random(i + vec2(1.0, 1.0));
 
     vec2 u = f * f * (3.0 - 2.0 * f);
 
-    return mix(a, b, u.x) +
-            (c - a)* u.y * (1.0 - u.x) +
-            (d - b) * u.x * u.y;
+    return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-#define OCTAVES 6
 float fbm (vec2 st) {
     // Initial values
     float value = 0.0;
@@ -139,7 +140,7 @@ float fbm (vec2 st) {
     float frequency = 0.;
     //
     // Loop of octaves
-    for (int i = 0; i < OCTAVES; i++) {
+    for (int i = 0; i < 5; i++) {
         value += amplitude * noise(st);
         st *= 2.;
         amplitude *= .5;
@@ -165,6 +166,9 @@ float noise3d (vec3 x) {
 					mix(hash(n + 270.0), hash(n + 271.0), f.x), f.y), f.z);
 }
 
+// ------------------- FBM3D --------------------------
+// fbm noise for 2-4 octaves including rotation per octave
+
 #define OCTAVES 6
 float fbm3d (vec3 st) {
     // Initial values
@@ -181,6 +185,62 @@ float fbm3d (vec3 st) {
     return value;
 }
 
+//-------------------3D SIMPLEX -----------------------
+vec3 random3(vec3 c) {
+    float j = 4096.0*sin(dot(c,vec3(17.0, 59.4, 15.0)));
+    vec3 r;
+    r.z = fract(512.0*j);
+    j *= .125;
+    r.x = fract(512.0*j);
+    j *= .125;
+    r.y = fract(512.0*j);
+    return r-0.5;
+}
+
+const float F3 =  0.3333333;
+const float G3 =  0.1666667;
+float snoise(vec3 p) {
+
+    vec3 s = floor(p + dot(p, vec3(F3)));
+    vec3 x = p - s + dot(s, vec3(G3));
+     
+    vec3 e = step(vec3(0.0), x - x.yzx);
+    vec3 i1 = e*(1.0 - e.zxy);
+    vec3 i2 = 1.0 - e.zxy*(1.0 - e);
+         
+    vec3 x1 = x - i1 + G3;
+    vec3 x2 = x - i2 + 2.0*G3;
+    vec3 x3 = x - 1.0 + 3.0*G3;
+     
+    vec4 w, d;
+     
+    w.x = dot(x, x);
+    w.y = dot(x1, x1);
+    w.z = dot(x2, x2);
+    w.w = dot(x3, x3);
+     
+    w = max(0.6 - w, 0.0);
+     
+    d.x = dot(random3(s), x);
+    d.y = dot(random3(s + i1), x1);
+    d.z = dot(random3(s + i2), x2);
+    d.w = dot(random3(s + 1.0), x3);
+     
+    w *= w;
+    w *= w;
+    d *= w;
+     
+    return dot(d, vec4(52.0));
+}
+
+float snoiseFractal(vec3 m) {
+    return   0.5333333* snoise(m)
+                +0.2666667* snoise(2.0*m)
+                +0.1333333* snoise(4.0*m)
+                +0.0666667* snoise(8.0*m);
+}
+
+
 // ------------------- MAIN --------------------------
 
 void main()
@@ -188,19 +248,27 @@ void main()
     // Material base color (before shading)
     vec4 diffuseColor = u_Color;
 
-    //float dist = length(fs_Pos) * 0.2;
     float fbmNoise = fbm(fs_UV); 
-    float fbmNoise3D = fbm3d(fs_Pos.xyz) + 0.1;
+    float fbmNoise3D = snoiseFractal(fs_Pos.xyz) + 0.1;
     vec4 col = u_Color;
 
     vec3 pos = vec3(fs_Pos.x + rand1dTo1d(u_Time) * 0.001, fs_Pos.y + u_Time * 0.003, fs_Pos.z + u_Time * 0.005) / vec3(0.3);
     float noise = perlinNoise(pos) + 0.5;
 
     float dist = length(fs_Pos) * 0.2;
+    
     float brightness = 0.3;
-    float starGlow	= min( max( 1.0 - dist * ( 1.0 - brightness ), 0.0 ), 1.0 );
+    vec3 n = normalize(fs_Pos.xyz - vec3(0.0));
+    float u = atan(n.x, n.z) / (2.0 * 3.14159) + 0.5;
+    float v = n.y*0.5+0.5;
+    vec4 text = texture(u_Texture2D,vec2(u,v));
+    diffuseColor = mix(diffuseColor, text, 0.8);
+    
+    
+    float starGlow	= min( max( 1.0 - dist * ( 1.0 - brightness), 0.0 ), 1.0 );
 
-    vec4 texture = texture(u_Texture2D, vec2(fbmNoise3D, fbmNoise3D));
+    vec4 texture = texture(u_Texture2D, vec2(fbmNoise3D + 0.02, fbmNoise3D));
+    
     //vec4 b = texture(u_Textures, vec2(fbmNoise3D, fbmNoise3D));
 
     vec3 red = vec3(0.7, 0.2, 0.0);
@@ -220,7 +288,8 @@ void main()
                                                         //lit by our point light are not completely black.
 
     // Compute final shaded color
-    out_Col = vec4(texture.xyz, 1.0);
+    //out_Col = vec4(texture.xyz, 1.0);
+    out_Col = vec4((diffuseColor.rgb), diffuseColor.a);
     //out_Col = vec4(brightness, brightness, brightness, 1.0);
     //out_Col = fs_Col;
 }

@@ -254,10 +254,10 @@ void main()
                                                             // model matrix. This is necessary to ensure the normals remain
                                                             // perpendicular to the surface after the surface is transformed by
                                                             // the model matrix.
-    float fbmNoise3d = fbm3d(vs_Pos.xyz * 3.0);    
+    float fbmNoise3d = 0.2 * fbm3d(pos * 3.0);
     fs_Col = vec4(fbmNoise3d, fbmNoise3d, fbmNoise3d, 1.0);
 
-    vec4 deformedPos = vs_Pos + vs_Pos + vs_Nor  * fbmNoise3d * noise;
+    vec4 deformedPos = vs_Pos + vs_Nor  * fbmNoise3d * noise;
     fs_Pos = deformedPos;
 
     //deformedPos = vs_Pos;

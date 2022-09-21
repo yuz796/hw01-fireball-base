@@ -111,13 +111,13 @@ function main() {
   palette.color[2]/255.0, palette.color[3]));
 
 
-  const deformShader = new ShaderProgram([
-    new Shader(gl.VERTEX_SHADER, require('./shaders/lambert-deform-vert.glsl')),
-    new Shader(gl.FRAGMENT_SHADER, require('./shaders/lambert-deform-frag.glsl')),
+  const fireShader = new ShaderProgram([
+    new Shader(gl.VERTEX_SHADER, require('./shaders/fire-vert.glsl')),
+    new Shader(gl.FRAGMENT_SHADER, require('./shaders/fire-frag.glsl')),
   ])
 
 
-  deformShader.setTexture(0);
+  fireShader.setTexture(0);
 
   // This function will be called every frame
   function tick() {
@@ -135,21 +135,21 @@ function main() {
 
     if(prevSpeed !==  controls.speed){
       prevSpeed = controls.speed;
-      deformShader.setSpeed(controls.speed);
+      fireShader.setSpeed(controls.speed);
     }
 
     if(prevHeight !==  controls.fireHeight){
       prevSpeed = controls.fireHeight;
-      deformShader.setHeight(controls.fireHeight);
+      fireShader.setHeight(controls.fireHeight);
     }
 
 
     lambert.setGeometryColor(vec4.fromValues(palette.color[0]/255.0, palette.color[1]/255.0,
                                              palette.color[2]/255.0, palette.color[3]));
-    deformShader.setGeometryColor(vec4.fromValues(palette.color[0]/255.0, palette.color[1]/255.0,
+    fireShader.setGeometryColor(vec4.fromValues(palette.color[0]/255.0, palette.color[1]/255.0,
                                              palette.color[2]/255.0, palette.color[3])); 
-    deformShader.setTime(time);                                                   
-    renderer.render(camera, deformShader, [
+    fireShader.setTime(time);                                                   
+    renderer.render(camera, fireShader, [
       icosphere,
       //square
       //cube
