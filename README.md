@@ -1,4 +1,4 @@
-# HW 0: Fireball
+# HW 0: Fireball 
 
 ## Info
 Yuqi Zhang(yuqiko)
