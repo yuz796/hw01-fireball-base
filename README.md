@@ -2,14 +2,12 @@
 
 ## Info
 Yuqi Zhang(yuqiko)
-Link:
+Link: https://yuz796.github.io/hw01-fireball-base/
 
 ## Description
 - Utilized the fbm, PseudoPerlin3dNoise to generate the base noise and also use the ridgedNoise to generate the fire noise
 - Utilized the smoothstep to blend the base ball and fire noise
 - Enabled the load texture function
-
-Link:
 
 ## Resources
 - Javascript modules https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import
