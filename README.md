@@ -20,3 +20,7 @@ Link:
   - Interfaces https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API
   - Types https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Types
   - Constants https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Constants
+  - Pseudo-3d Noise https://www.shadertoy.com/view/MtcGRl
+  - RidgedNoise https://stackoverflow.com/questions/36796829/procedural-terrain-with-ridged-fractal-noise
+  - Sun https://www.shadertoy.com/view/4lfSzS
+  - Load Texture https://www.youtube.com/watch?v=aWs8Z-yJZSI
