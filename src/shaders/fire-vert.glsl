@@ -34,6 +34,7 @@ out vec4 fs_LightVec;       // The direction in which our virtual light lies, re
 out vec4 fs_Col;            // The color of each vertex. This is implicitly passed to the fragment shader.
 out vec4 fs_Pos;
 out vec2 fs_UV;
+out float fs_BlendNoise;
 
 const vec4 lightPos = vec4(5, 5, 20, 1); //The position of our virtual light, which is used to compute the shading of
                                         //the geometry in the fragment shader.
@@ -84,7 +85,7 @@ float pnoise(vec2 co, float freq, int steps, float persistence)
 
 
 
-// ------------------- 3D PERLIN --------------------------
+// ------------------- Base Noise --------------------------
 
 float rand3dTo1d(vec3 value, vec3 dotDir){
     //make value smaller to avoid artefacts
@@ -118,35 +119,20 @@ float easeInOut(float interpolator){
     return mix(easeInValue, easeOutValue, interpolator);
 }
 
-float perlinNoise(vec3 value){
-    vec3 fraction = fract(value);
-
-    float interpolatorX = easeInOut(fraction.x);
-    float interpolatorY = easeInOut(fraction.y);
-    float interpolatorZ = easeInOut(fraction.z);
-
-    float cellNoiseZ[2];
-    for(int z=0;z<=1;z++){
-        float cellNoiseY[2];
-        for(int y=0;y<=1;y++){
-            float cellNoiseX[2];
-            for(int x=0;x<=1;x++){
-                vec3 cell = floor(value) + vec3(x, y, z);
-                vec3 cellDirection = rand3dTo3d(cell) * 2.0 - 1.0;
-                vec3 compareVector = fraction - vec3(x, y, z);               
-                cellNoiseX[x] = dot(cellDirection, compareVector);
-            }
-            cellNoiseY[y] = mix(cellNoiseX[0], cellNoiseX[1], interpolatorX);
-        }
-        cellNoiseZ[z] = mix(cellNoiseY[0], cellNoiseY[1], interpolatorY);
-    }
-    float noise = mix(cellNoiseZ[0], cellNoiseZ[1], interpolatorZ);
-    return noise;
+float rand1(float value){
+	float random = u_Height * fract(sin(value + 0.943) * 1423558.53253);
+	return random;
 }
 
-float rand1dTo1d(float value){
-	float random = u_Height * fract(sin(value + 0.546) * 143758.5453);
-	return random;
+//--------------------Lerp --------------------------
+float smoothMax(float a, float b, float k) {
+       k = min(0.0, -k);
+       float h = max(0.0, min(1.0, (b - a + k) / (2.0 * k)));
+       return a * h + b * (1.0 - h) - k * h * (1.0 - h);
+}
+
+float blend(float startHeight, float blendDst, float height) {
+        return smoothstep(startHeight - blendDst / 2.0, startHeight + blendDst / 2.0, height);
 }
 
 // ------------------- FBM --------------------------
@@ -192,7 +178,6 @@ float noise3d (vec3 x) {
 					mix(hash(n + 270.0), hash(n + 271.0), f.x), f.y), f.z);
 }
 
-#define OCTAVES 6
 float fbm (vec2 st) {
     // Initial values
     float value = 0.0;
@@ -200,7 +185,7 @@ float fbm (vec2 st) {
     float frequency = 0.;
     //
     // Loop of octaves
-    for (int i = 0; i < OCTAVES; i++) {
+    for (int i = 0; i < 6; i++) {
         value += amplitude * noise(st);
         st *= 2.;
         amplitude *= .5;
@@ -208,7 +193,6 @@ float fbm (vec2 st) {
     return value;
 }
 
-#define OCTAVES 6
 float fbm3d (vec3 st) {
     // Initial values
     float value = 0.0;
@@ -216,7 +200,7 @@ float fbm3d (vec3 st) {
     float frequency = 0.;
     //
     // Loop of octaves
-    for (int i = 0; i < OCTAVES; i++) {
+    for (int i = 0; i < 6; i++) {
         value += amplitude * noise3d(st);
         st *= 2.;
         amplitude *= .5;
@@ -236,17 +220,100 @@ float bias(float b, float t) {
     return (pow(t, log(b)) / log(0.5));
 }
 
+//-------------------- RIGID NOISE ---------------------------
+
+float ridgidNoise(vec3 pos) {
+    vec3 offset = vec3(cos(u_Time*0.001));
+    float lacunarity = 0.5;
+
+      // Sum up noise layers
+    float scale = 1.5;
+    float noiseSum = 0.0;
+    float frequency = scale;
+    float ridgeWeight = 1.0;
+    float amplitude = 2.0;
+    
+    for (float i = 0.0; i < 5.0; i ++) {
+        float noiseVal = 1.0 - abs(noise3d(pos * frequency + offset));
+        noiseVal = pow(abs(noiseVal), 3.0);
+        noiseVal *= ridgeWeight;
+        ridgeWeight = clamp(noiseVal * 0.8,0.0,1.0);
+        noiseSum += noiseVal * 2.0;
+        amplitude *= 0.5;
+        frequency *= lacunarity;
+    }
+    return noiseSum * 11.0;
+  }
+
+  float smoothedRidgidNoise(vec3 pos) {
+      vec3 sphereNormal = normalize(pos);
+      vec3 axisA = cross(sphereNormal, vec3(0.0,1.0,0.0));
+      vec3 axisB = cross(sphereNormal, axisA);
+
+      float offsetDst = 8.0*0.05;
+      float sample0 = ridgidNoise(pos);
+      float sample1 = ridgidNoise(pos - axisA * offsetDst);
+      float sample2 = ridgidNoise(pos + axisA * offsetDst);
+      float sample3 = ridgidNoise(pos - axisB * offsetDst);
+      float sample4 = ridgidNoise(pos + axisB * offsetDst);
+      return (sample0 + sample1 + sample2 + sample3 + sample4) / 5.0;
+  }
+
+//--------------------Pseudo 3d ---------------------
+vec2 GetGradient(vec2 intPos, float t) {
+    
+    // Uncomment for calculated rand
+    //float rand = fract(sin(dot(intPos, vec2(12.9898, 78.233))) * 43758.5453);;
+    
+    // Texture-based rand (a bit faster on my GPU)
+    float rand = rand(intPos);
+    
+    // Rotate gradient: random starting rotation, random rotation rate
+    float angle = 6.283185 * rand + 4.0 * t * rand;
+    return vec2(cos(angle), sin(angle));
+}
+
+
+float Pseudo3dNoise(vec3 pos) {
+    vec2 i = floor(pos.xy);
+    vec2 f = pos.xy - i;
+    vec2 blend = f * f * (3.0 - 2.0 * f);
+    float noiseVal =
+        mix(
+            mix(
+                dot(GetGradient(i + vec2(0, 0), pos.z), f - vec2(0, 0)),
+                dot(GetGradient(i + vec2(1, 0), pos.z), f - vec2(1, 0)),
+                blend.x),
+            mix(
+                dot(GetGradient(i + vec2(0, 1), pos.z), f - vec2(0, 1)),
+                dot(GetGradient(i + vec2(1, 1), pos.z), f - vec2(1, 1)),
+                blend.x),
+        blend.y
+    );
+    return noiseVal / 0.7; // normalize to about [-1..1]
+}
+
+
+
+
+
 // ------------------- MAIN --------------------------
 
 void main()
 {
-    fs_Col = vs_Col;                         // Pass the vertex colors to the fragment shader for interpolation
+    fs_Col = vs_Col;
 
     
-    vec3 pos = (vec3(vs_Pos.x + rand1dTo1d(u_Time) * 0.001, vs_Pos.y + u_Time * 0.003, vs_Pos.z + u_Time * 0.005 * u_Speed) / vec3(0.3));
-    float noise = perlinNoise(pos) + fbm3d(pos) + pnoise(pos.xy, 2.0, 2, u_Height)+ u_Height;
+    vec3 pos = (vec3(vs_Pos.x + rand1(u_Time) * 0.001, vs_Pos.y + u_Time * 0.003, vs_Pos.z + u_Time * 0.005 * u_Speed) / vec3(0.3));
+    float noise = Pseudo3dNoise(pos) + fbm3d(pos) + pnoise(pos.xy, 2.0, 2, u_Height)+ u_Height;
     
-    //vec3 pos2 = vec3(vs_Pos.x + rand1dTo1d(float(u_Time)) * 0.001, vs_Pos.y + float(u_Time) * 0.003, vs_Pos.z + float(u_Time) * 0.005) / vec3(0.1);
+    float base_noise = Pseudo3dNoise(pos);
+    base_noise = smoothMax(base_noise,-10.0, 1.0);
+    base_noise = abs(base_noise);
+    float mask = blend(0.0,0.6,fbm3d(pos));
+    float ridgeNoise = smoothedRidgidNoise(pos);
+    float terrainNoise = base_noise * 0.01 + ridgeNoise * 0.01 * mask;
+    fs_BlendNoise = terrainNoise;
 
     mat3 invTranspose = mat3(u_ModelInvTr);
     fs_Nor = vec4(invTranspose * vec3(vs_Nor), 0);          // Pass the vertex normals to the fragment shader for interpolation.
@@ -257,13 +324,14 @@ void main()
     float fbmNoise3d = 0.2 * fbm3d(pos * 3.0);
     fs_Col = vec4(fbmNoise3d, fbmNoise3d, fbmNoise3d, 1.0);
 
-    vec4 deformedPos = vs_Pos + vs_Nor  * fbmNoise3d * noise;
+    vec4 deformedPos = vs_Pos + vs_Nor  * fbmNoise3d * noise + terrainNoise;
     fs_Pos = deformedPos;
 
-    //deformedPos = vs_Pos;
     vec4 modelposition = u_Model * deformedPos;   // Temporarily store the transformed vertex positions for use below
 
     fs_LightVec = lightPos - modelposition;  // Compute the direction in which the light source lies
+    fs_Pos = modelposition;
+    
 
     gl_Position = u_ViewProj * modelposition;// gl_Position is a built-in variable of OpenGL which is
                                              // used to render the final positions of the geometry's vertices

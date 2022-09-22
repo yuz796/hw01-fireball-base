@@ -13,8 +13,7 @@ precision highp float;
 
 uniform vec4 u_Color; // The color with which to render this instance of geometry.
 uniform float u_Time;
-uniform sampler2D u_Texture2D;
-uniform sampler2D u_Textures;
+uniform sampler2D u_Texture;
 
 // These are the interpolated values out of the rasterizer, so you can't know
 // their specific values without knowing the vertices that contributed to them
@@ -23,6 +22,7 @@ in vec4 fs_LightVec;
 in vec4 fs_Col;
 in vec4 fs_Pos;
 in vec2 fs_UV;
+in float fs_BlendNoise;
 
 out vec4 out_Col; // This is the final output color that you will see on your
                   // screen for the pixel that is currently being processed.
@@ -40,23 +40,23 @@ float gain(float g, float t) {
     }
 }
 
-// ------------------- 3D PERLIN --------------------------
+// ------------------- Base Noise --------------------------
 
-float rand3dTo1d(vec3 value, vec3 dotDir){
+float rand3to1(vec3 value, vec3 dotDir){
     //make value smaller to avoid artefacts
     vec3 smallValue = sin(value);
     //get scalar value from 3d vector
     float random = dot(smallValue, dotDir);
     //make value more random by making it bigger and then taking the factional part
-    random = fract(sin(random) * 143758.5453);
+    random = fract(sin(random) * 234234.2394234);
     return random;
 }
 
-vec3 rand3dTo3d(vec3 value){
+vec3 rand3d(vec3 value){
     return vec3(
-        rand3dTo1d(value, vec3(12.989, 78.233, 37.719)),
-        rand3dTo1d(value, vec3(39.346, 11.135, 83.155)),
-        rand3dTo1d(value, vec3(73.156, 52.235, 09.151))
+        rand3to1(value, vec3(452.929, 78.233, 35.1234)),
+        rand3to1(value, vec3(235.126, 23.3441, 30.5434)),
+        rand3to1(value, vec3(34.3456, 52.23754, 39.221))
     );
 }
 
@@ -74,32 +74,6 @@ float easeInOut(float interpolator){
     return mix(easeInValue, easeOutValue, interpolator);
 }
 
-float perlinNoise(vec3 value){
-    vec3 fraction = fract(value);
-
-    float interpolatorX = easeInOut(fraction.x);
-    float interpolatorY = easeInOut(fraction.y);
-    float interpolatorZ = easeInOut(fraction.z);
-
-    float cellNoiseZ[2];
-    for(int z=0;z<=1;z++){
-        float cellNoiseY[2];
-        for(int y=0;y<=1;y++){
-            float cellNoiseX[2];
-            for(int x=0;x<=1;x++){
-                vec3 cell = floor(value) + vec3(x, y, z);
-                vec3 cellDirection = rand3dTo3d(cell) * 2.0 - 1.0;
-                vec3 compareVector = fraction - vec3(x, y, z);               
-                cellNoiseX[x] = dot(cellDirection, compareVector);
-            }
-            cellNoiseY[y] = mix(cellNoiseX[0], cellNoiseX[1], interpolatorX);
-        }
-        cellNoiseZ[z] = mix(cellNoiseY[0], cellNoiseY[1], interpolatorY);
-    }
-    float noise = mix(cellNoiseZ[0], cellNoiseZ[1], interpolatorZ);
-    return noise;
-}
-
 float rand1dTo1d(float value){
 	float random = fract(sin(value + 0.546) * 143758.5453);
 	return random;
@@ -108,8 +82,8 @@ float rand1dTo1d(float value){
 // ------------------- FBM2D --------------------------
 float random (vec2 st) {
     return fract(sin(dot(st.xy,
-                         vec2(12.9898,78.233)))*
-        43758.5453123);
+                         vec2(223.98,7233.213)))*
+        324908.0092123);
 }
 
 float hashnew (vec2 n)
@@ -161,15 +135,14 @@ float noise3d (vec3 x) {
 	float n = p.x + p.y * 157.0 + 113.0 * p.z;
 	return mix(
 			mix(mix(hash(n + 0.0), hash(n + 1.0), f.x),
-					mix(hash(n + 157.0), hash(n + 158.0), f.x), f.y),
-			mix(mix(hash(n + 113.0), hash(n + 114.0), f.x),
+					mix(hash(n + 205.0), hash(n + 328.0), f.x), f.y),
+			mix(mix(hash(n + 133.0), hash(n + 114.0), f.x),
 					mix(hash(n + 270.0), hash(n + 271.0), f.x), f.y), f.z);
 }
 
 // ------------------- FBM3D --------------------------
 // fbm noise for 2-4 octaves including rotation per octave
 
-#define OCTAVES 6
 float fbm3d (vec3 st) {
     // Initial values
     float value = 0.0;
@@ -177,7 +150,7 @@ float fbm3d (vec3 st) {
     float frequency = 0.;
     //
     // Loop of octaves
-    for (int i = 0; i < OCTAVES; i++) {
+    for (int i = 0; i < 5; i++) {
         value += amplitude * noise3d(st);
         st *= 2.;
         amplitude *= .5;
@@ -240,6 +213,52 @@ float snoiseFractal(vec3 m) {
                 +0.0666667* snoise(8.0*m);
 }
 
+// ------------------ REMAP RELATED FUNCTION---------
+
+vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d )
+{
+    return a + b*cos( 6.28318*(c*t+d) );
+}
+float remap01(float v, float minOld, float maxOld) {
+    return clamp((v-minOld) / (maxOld-minOld),0.0,1.0);
+}
+
+//--------------------Pseudo 3d ---------------------
+float rand(vec2 co){
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+vec2 GetGradient(vec2 intPos, float t) {
+    
+    // Uncomment for calculated rand
+    //float rand = fract(sin(dot(intPos, vec2(12.9898, 78.233))) * 43758.5453);;
+    
+    // Texture-based rand (a bit faster on my GPU)
+    float rand = rand(intPos);
+    
+    // Rotate gradient: random starting rotation, random rotation rate
+    float angle = 6.283185 * rand + 4.0 * t * rand;
+    return vec2(cos(angle), sin(angle));
+}
+
+
+float Pseudo3dNoise(vec3 pos) {
+    vec2 i = floor(pos.xy);
+    vec2 f = pos.xy - i;
+    vec2 blend = f * f * (3.0 - 2.0 * f);
+    float noiseVal =
+        mix(
+            mix(
+                dot(GetGradient(i + vec2(0, 0), pos.z), f - vec2(0, 0)),
+                dot(GetGradient(i + vec2(1, 0), pos.z), f - vec2(1, 0)),
+                blend.x),
+            mix(
+                dot(GetGradient(i + vec2(0, 1), pos.z), f - vec2(0, 1)),
+                dot(GetGradient(i + vec2(1, 1), pos.z), f - vec2(1, 1)),
+                blend.x),
+        blend.y
+    );
+    return noiseVal / 0.7; // normalize to about [-1..1]
+}
 
 // ------------------- MAIN --------------------------
 
@@ -253,43 +272,61 @@ void main()
     vec4 col = u_Color;
 
     vec3 pos = vec3(fs_Pos.x + rand1dTo1d(u_Time) * 0.001, fs_Pos.y + u_Time * 0.003, fs_Pos.z + u_Time * 0.005) / vec3(0.3);
-    float noise = perlinNoise(pos) + 0.5;
+    float noise = Pseudo3dNoise(pos) + 0.5;
 
     float dist = length(fs_Pos) * 0.2;
     
     float brightness = 0.3;
+    
+    // fire and ball
+    vec4 fire_color = vec4(1.0, 1.0, 0.4, 1.0);
+    vec4 ball_color = vec4(1.0, 0.0, 0.0, 1.0)+vec4(vec3(sin(u_Time*0.002)*(snoise(fs_Pos.xyz)+1.0))*0.02,1.0);
+
+    vec3 a = vec3(0.5, 0.5, 0.5);
+    vec3 b = vec3(0.5, 0.5, 0.5);
+    vec3 c = vec3(1.0, 1.0, 0.5);
+    vec3 d = vec3(0.80, 0.90, 0.30);
+    vec4 border_color = vec4(1.0, 0.8, 0.0, 1.0);
+    vec3 SpecularColor = palette(sin(u_Time*0.001),a,b,c,d)*0.5;
+    diffuseColor = mix(ball_color * 0.5, u_Color, 0.8);
+    vec3 specularTerm = vec3(0.0);
+    float shininess = 0.2;
+    
+    
+    vec3 localNormal = normalize(fs_Pos.xyz);
+    float steepness = 1.0 - dot(localNormal, vec3(fs_Nor));
+    steepness = remap01(steepness, 0.0, 0.05);
+
+    float steepThreshold=0.7;
+   float elevationThreshold=0.3;
+    vec3 steepCol = vec3(fire_color);
+    float noiseLerp = snoise(vec3(fs_Pos))*0.05;
+    
+    vec3 flatCol = vec3(fire_color);
+    float flatStrength = 1.0 - bias(steepness,0.8)*0.5;
+
+    vec3 redFireCol = mix(steepCol, flatCol, flatStrength);
+    if(fs_BlendNoise <= (0.1 + noiseLerp + sin(u_Time*0.01)*0.01)){
+        float shoreStrength = 1.0 - bias(fs_BlendNoise *10.0,0.3);
+        redFireCol = mix(redFireCol, vec3(border_color), shoreStrength);
+    }
+    
+    diffuseColor += vec4(redFireCol,1.0);
+
+    
     vec3 n = normalize(fs_Pos.xyz - vec3(0.0));
     float u = atan(n.x, n.z) / (2.0 * 3.14159) + 0.5;
     float v = n.y*0.5+0.5;
-    vec4 text = texture(u_Texture2D,vec2(u,v));
+    vec4 text = texture(u_Texture,vec2(u,v));
     diffuseColor = mix(diffuseColor, text, 0.8);
-    
-    
-    float starGlow	= min( max( 1.0 - dist * ( 1.0 - brightness), 0.0 ), 1.0 );
 
-    vec4 texture = texture(u_Texture2D, vec2(fbmNoise3D + 0.02, fbmNoise3D));
-    
-    //vec4 b = texture(u_Textures, vec2(fbmNoise3D, fbmNoise3D));
+    vec4 texture = texture(u_Texture, vec2(fbmNoise3D + 0.02, fbmNoise3D));
 
     vec3 red = vec3(0.7, 0.2, 0.0);
-    vec3 orange = vec3(255.0 / 255.0, 190.0 / 255.0, 78.0 / 255.0);
+    vec3 orangered = vec3(1.0, 0.87, 0.242);
 
     col = vec4(dist, dist, dist, 1.0);
-    vec3 mixCol = mix(red, orange, dist);
+    vec3 mixCol = mix(red, orangered, dist);
     col.xyz = mixCol;
-
-    // Calculate the diffuse term for Lambert shading
-    //float diffuseTerm = dot(normalize(fs_Nor), normalize(fs_LightVec));
-    // Avoid negative lighting values
-    //diffuseTerm = clamp(diffuseTerm, 0.0, 1.0);
-    //float ambientTerm = 0.2;
-    //float lightIntensity = diffuseTerm + ambientTerm;   //Add a small float value to the color multiplier
-                                                        //to simulate ambient lighting. This ensures that faces that are not
-                                                        //lit by our point light are not completely black.
-
-    // Compute final shaded color
-    //out_Col = vec4(texture.xyz, 1.0);
     out_Col = vec4((diffuseColor.rgb), diffuseColor.a);
-    //out_Col = vec4(brightness, brightness, brightness, 1.0);
-    //out_Col = fs_Col;
 }

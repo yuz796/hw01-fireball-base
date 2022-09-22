@@ -72,7 +72,7 @@ function main() {
     color: [ 255, 195, 75, 255 ], // RGB with alpha
   };
   gui.addColor(palette, 'color');
-  gui.add(controls, 'speed', 0, 10).step(1);
+  gui.add(controls, 'speed', 0.1, 10).step(0.1);
   gui.add(controls, 'fireHeight', 0.1, 2).step(0.1);
 
   // get canvas and webgl context
