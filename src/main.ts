@@ -93,13 +93,9 @@ function main() {
   gl.enable(gl.DEPTH_TEST);
 
   // ---- load texture
-  const gradientTexture = loadTexture('../texture/fire.jpeg');
+  const gradientTexture = loadTexture('./texture/fire.jpeg');
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, gradientTexture);
-
-  const gradientTexture2 = loadTexture('../texture/gradient2.png');
-  gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, gradientTexture2);
 
   const lambert = new ShaderProgram([
     new Shader(gl.VERTEX_SHADER, require('./shaders/lambert-vert.glsl')),
