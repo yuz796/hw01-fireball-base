@@ -312,8 +312,8 @@ void main()
     base_noise = abs(base_noise);
     float mask = blend(0.0,0.6,fbm3d(pos));
     float ridgeNoise = smoothedRidgidNoise(pos);
-    float terrainNoise = base_noise * 0.01 + ridgeNoise * 0.01 * mask;
-    fs_BlendNoise = terrainNoise;
+    float fireNoise = base_noise * 0.01 + ridgeNoise * 0.01 * mask;
+    fs_BlendNoise = fireNoise;
 
     mat3 invTranspose = mat3(u_ModelInvTr);
     fs_Nor = vec4(invTranspose * vec3(vs_Nor), 0);          // Pass the vertex normals to the fragment shader for interpolation.
@@ -324,7 +324,7 @@ void main()
     float fbmNoise3d = 0.2 * fbm3d(pos * 3.0);
     fs_Col = vec4(fbmNoise3d, fbmNoise3d, fbmNoise3d, 1.0);
 
-    vec4 deformedPos = vs_Pos + vs_Nor  * fbmNoise3d * noise + terrainNoise;
+    vec4 deformedPos = vs_Pos + vs_Nor  * fbmNoise3d * noise + fireNoise;
     fs_Pos = deformedPos;
 
     vec4 modelposition = u_Model * deformedPos;   // Temporarily store the transformed vertex positions for use below
